@@ -144,7 +144,7 @@ pub struct PropConsumeType(pub String);
 pub struct PropDestLevel(pub String);
 
 #[derive(Debug, Component, Clone, Serialize, Deserialize)]
-pub struct PropDestLoc(pub u32);
+pub struct PropDestLoc(pub i32);
 
 #[derive(Debug, Component, Clone, Serialize, Deserialize)]
 pub struct PropExp(pub i32);
@@ -228,7 +228,7 @@ pub struct PropScale(pub Vector3<f32>);
 pub struct PropSignalType(pub String);
 
 #[derive(Debug, Component, Clone, Serialize, Deserialize)]
-pub struct PropStartLoc(pub u32);
+pub struct PropStartLoc(pub i32);
 
 #[derive(Debug, Component, Clone, Serialize, Deserialize)]
 pub struct PropHasRefs(pub bool);
@@ -272,6 +272,7 @@ pub struct ToTemplateLinkInfo {
 pub enum Link {
     AIProjectile(AIProjectileOptions),
     AIRangedWeapon,
+    AIWatchObj(AIWatchOptions),
     Contains(u32),
     Corpse(CorpseOptions),
     Flinderize(FlinderizeOptions),
@@ -430,6 +431,46 @@ impl FlinderizeOptions {
             impulse,
             scatter,
             offset,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AIWatchOptions {
+    pub radius: f32,
+    pub height: f32,
+    pub scripted_actions: Vec<AIScriptedAction>,
+}
+
+impl AIWatchOptions {
+    pub fn read(reader: &mut Box<dyn ReadAndSeek>, _len: u32) -> AIWatchOptions {
+        let _unknown = read_bytes(reader, 60);
+
+        let _trigger = read_u32(reader);
+        let _awareness = read_u32(reader);
+        let _ai_watch_visibility = read_u32(reader);
+        let _unknown2 = read_i32(reader);
+        let _ai_watch_kill_condition = read_u32(reader);
+        let _kill_like_links = read_bool(reader);
+        let _once_only = read_bool(reader);
+        let _reuse_time = read_i32(reader);
+        let _reset_time = read_i32(reader);
+        let _min_alertness = read_u32(reader);
+        let _max_alertness = read_u32(reader);
+        let _ai_priority = read_u32(reader);
+        let radius = read_i32(reader) as f32 / SCALE_FACTOR;
+        let height = read_i32(reader) as f32 / SCALE_FACTOR;
+
+        let mut scripted_actions = Vec::new();
+        for _ in 0..8 {
+            let action = AIScriptedAction::read(reader);
+            scripted_actions.push(action);
+        }
+
+        AIWatchOptions {
+            radius,
+            height,
+            scripted_actions,
         }
     }
 }
@@ -602,6 +643,12 @@ pub fn get<R: io::Read + io::Seek + 'static>() -> (
     let links_with_data = vec![
         // define_link_with_data("L$Corpse", "LD$Corpse", CorpseOptions::read, Link::Corpse),
         define_link_with_data(
+            "L$AIWatchOb",
+            "LD$AIWatchO",
+            AIWatchOptions::read,
+            Link::AIWatchObj,
+        ),
+        define_link_with_data(
             "L$Contains",
             "LD$Contains",
             |reader, _len| read_u32(reader),
@@ -710,7 +757,7 @@ pub fn get<R: io::Read + io::Seek + 'static>() -> (
         ),
         define_prop(
             "P$DestLoc",
-            |reader, _len| read_u32(reader),
+            |reader, _len| read_i32(reader),
             PropDestLoc,
             accumulator::latest,
         ),
@@ -1004,7 +1051,7 @@ pub fn get<R: io::Read + io::Seek + 'static>() -> (
         ),
         define_prop(
             "P$StartLoc",
-            |reader, _len| read_u32(reader),
+            |reader, _len| read_i32(reader),
             PropStartLoc,
             accumulator::latest,
         ),
@@ -1431,10 +1478,6 @@ where
             if let Some(new_ent_id) = entity_id_map.get(&EntityId::from_inner(*old_ent_id).unwrap())
             {
                 let prop: ROutput = serde_json::from_value(json.clone()).unwrap();
-                println!(
-                    "-- Deserialized prop for entity {:?} - {:?}",
-                    new_ent_id, &prop
-                );
                 world.add_component(*new_ent_id, prop);
             }
         }

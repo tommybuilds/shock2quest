@@ -1,10 +1,12 @@
 use cgmath::{point3, Transform};
 use dark::{
-    properties::{Link, Links, PropClassTag, PropTemplateId, PropTweqModelConfig, ToLink},
+    properties::{
+        Link, Links, PropClassTag, PropSymName, PropTemplateId, PropTweqModelConfig, ToLink,
+    },
     EnvSoundQuery,
 };
 use engine::audio::AudioHandle;
-use shipyard::{EntityId, Get, View, World};
+use shipyard::{EntityId, Get, IntoIter, IntoWithId, View, World};
 
 use crate::{runtime_props::RuntimePropTransform, util::point3_to_vec3};
 
@@ -36,13 +38,15 @@ pub fn get_all_links_with_template<TData>(
     linked_entities
 }
 
-pub fn get_first_link_with_template_and_data<TData: Copy>(
+pub fn get_first_link_with_template_and_data<TData: Clone>(
     world: &World,
     producing_entity_id: EntityId,
     filter_fn: fn(&Link) -> Option<TData>,
 ) -> Option<(i32, TData)> {
     let all_links = get_all_links_with_template(world, producing_entity_id, filter_fn);
-    all_links.get(0).copied()
+    all_links
+        .get(0)
+        .map(|(template_id, data)| (*template_id, data.clone()))
 }
 
 pub fn for_each_link(
@@ -92,6 +96,24 @@ pub fn get_all_links_of_type(
     };
 
     linked_entities
+}
+
+pub fn get_entities_by_name(world: &World, name: &str) -> Vec<EntityId> {
+    let mut entities = Vec::new();
+    world.run(|v_prop_symyname: View<PropSymName>| {
+        for (id, symname) in v_prop_symyname.iter().with_id() {
+            if name.eq_ignore_ascii_case(&symname.0) {
+                entities.push(id);
+            }
+        }
+    });
+
+    entities
+}
+
+pub fn get_first_entity_by_name(world: &World, name: &str) -> Option<EntityId> {
+    let entities = get_entities_by_name(world, name);
+    entities.get(0).copied()
 }
 
 pub fn template_id_string(world: &World, entity_id: &EntityId) -> String {

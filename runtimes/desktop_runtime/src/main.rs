@@ -10,13 +10,16 @@ use engine::profile;
 
 use engine::util::compute_view_matrix_from_render_context;
 use glfw::Modifiers;
+use shock2vr::command::LoadCommand;
 use shock2vr::command::MoveInventoryCommand;
 
+use shock2vr::command::SaveCommand;
 use shock2vr::command::SpawnItemCommand;
 
 use std::time::Instant;
 
 use shock2vr::GameOptions;
+use shock2vr::SpawnLocation;
 use tracing::trace;
 
 extern crate gl;
@@ -225,8 +228,12 @@ pub fn main() {
     let file_system = engine.get_storage().external_filesystem();
     let experimental_features: HashSet<String> =
         args.experimental.unwrap_or(vec![]).into_iter().collect();
+
+    let (mission, spawn_location) = parse_mission(&args.mission);
+
     let options = GameOptions {
-        mission: args.mission,
+        mission,
+        spawn_location,
         save_file: args.save_file,
         debug_draw: args.debug_draw,
         debug_physics: args.debug_physics,
@@ -326,13 +333,51 @@ pub fn main() {
     }
 }
 
+fn parse_mission(mission: &str) -> (String, SpawnLocation) {
+    if !mission.contains(':') {
+        return (mission.to_owned(), SpawnLocation::MapDefault);
+    }
+
+    let parts: Vec<&str> = mission.split(':').collect();
+
+    if parts.len() > 2 {
+        panic!("Unable to parse mission argument: {}", mission);
+    }
+
+    let mission = parts[0];
+    let maybe_spawn_location = parts[1];
+
+    let spawn_location = if parts[1].contains(",") {
+        let vec_parts: Vec<&str> = parts[1].split(',').collect();
+        if vec_parts.len() != 3 {
+            panic!("Unable to parse position: {}", parts[1]);
+        }
+
+        let x = vec_parts[0].parse::<f32>().unwrap();
+        let y = vec_parts[1].parse::<f32>().unwrap();
+        let z = vec_parts[2].parse::<f32>().unwrap();
+        SpawnLocation::PositionRotation(vec3(x, y, z), Quaternion::<f32>::new(1.0, 0.0, 0.0, 0.0))
+    } else {
+        match parts[1].parse::<i32>() {
+            Ok(num) => SpawnLocation::Marker(num),
+            Err(_) => SpawnLocation::MapDefault,
+        }
+    };
+
+    return (mission.to_owned(), spawn_location);
+}
+
 struct InputState {
+    quick_load_pressed: bool,
+    quick_save_pressed: bool,
     space_pressed: bool,
     is_crouching: bool,
 }
 impl InputState {
     pub fn new() -> Self {
         Self {
+            quick_load_pressed: false,
+            quick_save_pressed: false,
             space_pressed: false,
             is_crouching: false,
         }
@@ -446,19 +491,23 @@ fn process_events(
     let mut right_thumbstick_value = vec2(0.0, 0.0);
     let mut left_thumbstick_value = vec2(0.0, 0.0);
     //let mut trigger_value = 0.0;
-    if window.get_key(Key::W) == Action::Press {
+
+    let is_alt_pressed = window.get_key(Key::LeftAlt) == Action::Press
+        || window.get_key(Key::RightAlt) == Action::Press;
+
+    if window.get_key(Key::W) == Action::Press && !is_alt_pressed {
         right_thumbstick_value += vec2(0.0, 1.0);
     }
 
-    if window.get_key(Key::S) == Action::Press {
+    if window.get_key(Key::S) == Action::Press && !is_alt_pressed {
         right_thumbstick_value += vec2(0.0, -1.0);
     }
 
-    if window.get_key(Key::A) == Action::Press {
+    if window.get_key(Key::A) == Action::Press && !is_alt_pressed {
         right_thumbstick_value += vec2(1.0, 0.0);
     }
 
-    if window.get_key(Key::D) == Action::Press {
+    if window.get_key(Key::D) == Action::Press && !is_alt_pressed {
         right_thumbstick_value += vec2(-1.0, 0.0);
     }
 
@@ -517,6 +566,20 @@ fn process_events(
         if !last_input_state.space_pressed {
             // commands.push(Box::new(SavePositionCommand::new()));
             commands.push(Box::new(SpawnItemCommand::new(input_context.head.rotation)))
+        }
+    }
+
+    if window.get_key(Key::S) == Action::Press && is_alt_pressed {
+        input_state.quick_save_pressed = true;
+        if !last_input_state.quick_save_pressed {
+            commands.push(Box::new(SaveCommand::new()));
+        }
+    }
+
+    if window.get_key(Key::L) == Action::Press && is_alt_pressed {
+        input_state.quick_load_pressed = true;
+        if !last_input_state.quick_load_pressed {
+            commands.push(Box::new(LoadCommand::new()));
         }
     }
 

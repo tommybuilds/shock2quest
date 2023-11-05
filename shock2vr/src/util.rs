@@ -9,7 +9,7 @@ use dark::properties::{Link, Links, PropHasRefs, PropPosition};
 use shipyard::{Component, EntityId, Get, IntoIter, IntoWithId, View, World};
 use tracing::{info, warn};
 
-use crate::runtime_props::RuntimePropTransform;
+use crate::runtime_props::{RuntimePropProxyEntity, RuntimePropTransform};
 
 /// log_property
 ///
@@ -49,7 +49,7 @@ where
 
                 for link in &links.to_links {
                     if should_log_link(&link.link) {
-                        info!(
+                        println!(
                             "({:?})[{:?}|{:?}|{:?}] link: {:?}",
                             id, maybe_template_id, maybe_sym_name, maybe_obj_name, link.link
                         );
@@ -114,7 +114,7 @@ pub fn get_position_from_transform(
     if let Ok(transform) = v_transform.get(entity_id) {
         let point = vec3_to_point3(offset);
         let xform = transform.0;
-        
+
         xform.transform_point(point)
     } else if let Ok(position) = v_prop_position.get(entity_id) {
         warn!("no transform for entity: {:?}", entity_id);
@@ -253,4 +253,22 @@ where
     }
 
     (true_map, false_map)
+}
+
+///
+/// resolve_proxy_entity
+///
+/// Given an EntityId, if the entity is a proxy entity (like a hitbox or gui), this will return the
+/// parent proxy.
+pub fn resolve_proxy_entity(world: &World, maybe_entity_id: EntityId) -> EntityId {
+    let v_proxy_entity = world.borrow::<View<RuntimePropProxyEntity>>().unwrap();
+    let maybe_prop_proxy_entity = v_proxy_entity.get(maybe_entity_id);
+
+    if let Ok(proxy_entity) = maybe_prop_proxy_entity {
+        // Proxy entity, return parent
+        proxy_entity.0
+    } else {
+        // Otherwise, return the current entity id
+        maybe_entity_id
+    }
 }

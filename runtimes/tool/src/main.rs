@@ -39,7 +39,7 @@ use engine::texture::TextureOptions;
 use engine::texture::TextureTrait;
 use engine::texture_format::RawTextureData;
 use num::ToPrimitive;
-use shock2vr::command::SavePositionCommand;
+use shock2vr::command::SaveCommand;
 use shock2vr::command::SpawnItemCommand;
 use shock2vr::command::TransitionLevelCommand;
 use shock2vr::GameOptions;
