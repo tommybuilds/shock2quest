@@ -1,6 +1,9 @@
 extern crate glfw;
+use crate::ffmpeg_test::VideoPlayer;
+
 use self::glfw::{Action, Context, Key};
 
+mod ffmpeg_test;
 use cgmath::point3;
 use cgmath::Decomposed;
 use cgmath::Deg;
@@ -25,12 +28,16 @@ use dark::ss2_skeleton;
 use dark::ss2_skeleton::Skeleton;
 use engine::assets::asset_cache::AssetCache;
 use engine::assets::asset_paths::AssetPath;
+use engine::audio::AudioContext;
 use engine::importers::FBX_IMPORTER;
 use engine::scene::mesh;
 use engine::scene::Scene;
 use engine::scene::SceneObject;
 use engine::scene::TextVertex;
+use engine::texture::init_from_memory2;
+use engine::texture::TextureOptions;
 use engine::texture::TextureTrait;
+use engine::texture_format::RawTextureData;
 use num::ToPrimitive;
 use shock2vr::command::SaveCommand;
 use shock2vr::command::SpawnItemCommand;
@@ -51,6 +58,7 @@ use shock2vr::time::Time;
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::BufReader;
+use std::io::Write;
 use std::rc::Rc;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
@@ -140,11 +148,108 @@ fn f32_from_bool(v: bool) -> f32 {
         0.0
     }
 }
-
+extern crate ffmpeg_next as ffmpeg;
+use ffmpeg::format::{input, Pixel};
+use ffmpeg::media::Type;
+use ffmpeg::util::frame::video::Video;
 pub fn main() {
     // glfw: initialize and configure
     // ------------------------------
 
+    ffmpeg::init().unwrap();
+    let mut audio_context: AudioContext<(), String> = AudioContext::new();
+
+    let file_name = &"../../Data/cutscenes/cs3.avi";
+    let mut video_player = VideoPlayer::from_filename(file_name).unwrap();
+    match ffmpeg::format::input(file_name) {
+        Ok(context) => {
+            for (k, v) in context.metadata().iter() {
+                println!("{}: {}", k, v);
+            }
+
+            if let Some(stream) = context.streams().best(ffmpeg::media::Type::Video) {
+                println!("Best video stream index: {}", stream.index());
+            }
+
+            if let Some(stream) = context.streams().best(ffmpeg::media::Type::Audio) {
+                println!("Best audio stream index: {}", stream.index());
+            }
+
+            if let Some(stream) = context.streams().best(ffmpeg::media::Type::Subtitle) {
+                println!("Best subtitle stream index: {}", stream.index());
+            }
+
+            println!(
+                "duration (seconds): {:.2}",
+                context.duration() as f64 / f64::from(ffmpeg::ffi::AV_TIME_BASE)
+            );
+
+            for stream in context.streams() {
+                println!("stream index {}:", stream.index());
+                println!("\ttime_base: {}", stream.time_base());
+                println!("\tstart_time: {}", stream.start_time());
+                println!("\tduration (stream timebase): {}", stream.duration());
+                println!(
+                    "\tduration (seconds): {:.2}",
+                    stream.duration() as f64 * f64::from(stream.time_base())
+                );
+                println!("\tframes: {}", stream.frames());
+                println!("\tdisposition: {:?}", stream.disposition());
+                println!("\tdiscard: {:?}", stream.discard());
+                println!("\trate: {}", stream.rate());
+
+                let codec =
+                    ffmpeg::codec::context::Context::from_parameters(stream.parameters()).unwrap();
+                println!("\tmedium: {:?}", codec.medium());
+                println!("\tid: {:?}", codec.id());
+
+                if codec.medium() == ffmpeg::media::Type::Video {
+                    if let Ok(video) = codec.decoder().video() {
+                        println!("\tbit_rate: {}", video.bit_rate());
+                        println!("\tmax_rate: {}", video.max_bit_rate());
+                        println!("\tframe_rate: {:?}", video.frame_rate());
+                        println!("\tdelay: {}", video.delay());
+                        println!("\tvideo.width: {}", video.width());
+                        println!("\tvideo.height: {}", video.height());
+                        println!("\tvideo.format: {:?}", video.format());
+                        println!("\tvideo.has_b_frames: {}", video.has_b_frames());
+                        println!("\tvideo.aspect_ratio: {}", video.aspect_ratio());
+                        println!("\tvideo.color_space: {:?}", video.color_space());
+                        println!("\tvideo.color_range: {:?}", video.color_range());
+                        println!("\tvideo.color_primaries: {:?}", video.color_primaries());
+                        println!(
+                            "\tvideo.color_transfer_characteristic: {:?}",
+                            video.color_transfer_characteristic()
+                        );
+                        println!("\tvideo.chroma_location: {:?}", video.chroma_location());
+                        println!("\tvideo.references: {}", video.references());
+                        println!("\tvideo.intra_dc_precision: {}", video.intra_dc_precision());
+                    }
+                } else if codec.medium() == ffmpeg::media::Type::Audio {
+                    if let Ok(audio) = codec.decoder().audio() {
+                        println!("\tbit_rate: {}", audio.bit_rate());
+                        println!("\tmax_rate: {}", audio.max_bit_rate());
+                        println!("\tdelay: {}", audio.delay());
+                        println!("\taudio.rate: {}", audio.rate());
+                        println!("\taudio.channels: {}", audio.channels());
+                        println!("\taudio.format: {:?}", audio.format());
+                        println!("\taudio.frames: {}", audio.frames());
+                        println!("\taudio.align: {}", audio.align());
+                        println!("\taudio.channel_layout: {:?}", audio.channel_layout());
+                    }
+                }
+            }
+
+            // Dump frames!
+            // ffmpeg_test::dump_frames(file_name);
+            ffmpeg_test::play_audio(file_name, &mut audio_context);
+            //panic!();
+        }
+
+        Err(error) => println!("error: {}", error),
+    };
+
+    // panic!();
     tracing_subscriber::fmt::init();
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
     // TODO: Figure out ANGLE
@@ -156,6 +261,8 @@ pub fn main() {
     #[cfg(target_os = "macos")]
     glfw.window_hint(glfw::WindowHint::OpenGlForwardCompat(true));
 
+    // println!("RES: {:?}", res);
+    // res.unwrap();
     // glfw window creation
     // --------------------
     let (mut window, events) = glfw
@@ -317,6 +424,44 @@ pub fn main() {
             orig_camera_position + orig_camera_forward,
         ));
 
+        let width = 16;
+        let height = 16;
+
+        let mut bytes = vec![];
+
+        for y in 0..height {
+            for x in 0..width {
+                if x % 2 == 0 {
+                    bytes.push(255);
+                    bytes.push(0);
+                    bytes.push(0);
+                } else {
+                    bytes.push(0);
+                    bytes.push(255);
+                    bytes.push(0);
+                }
+            }
+        }
+
+        let texture_data = RawTextureData {
+            width,
+            height,
+            format: engine::texture_format::PixelFormat::RGB,
+            bytes,
+        };
+
+        video_player.advance_by_time(time.elapsed);
+        let texture_data = video_player.get_current_frame();
+        let texture: Rc<dyn TextureTrait> = Rc::new(init_from_memory2(
+            texture_data,
+            &TextureOptions { wrap: false },
+        ));
+
+        let cube_mat = engine::scene::basic_material::create(texture, 1.0, 0.0);
+        let mut cube_obj = SceneObject::new(cube_mat, Box::new(engine::scene::cube::create()));
+        cube_obj.set_transform(Matrix4::from_scale(3.0));
+        scene.push(cube_obj);
+
         let camera_mat = engine::scene::color_material::create(vec3(1.0, 0.0, 0.0));
         let mut camera_obj = SceneObject::new(camera_mat, Box::new(engine::scene::cube::create()));
         camera_obj.set_transform(Matrix4::from_translation(orig_camera_position));
@@ -437,3 +582,9 @@ fn process_events(
 
 //     AnimationClip::create(&motion, &motion_info, mps_motion)
 // }
+fn save_file(frame: &Video, index: usize) -> std::result::Result<(), std::io::Error> {
+    let mut file = File::create(format!("frame{}.ppm", index))?;
+    file.write_all(format!("P6\n{} {}\n255\n", frame.width(), frame.height()).as_bytes())?;
+    file.write_all(frame.data(0))?;
+    Ok(())
+}
