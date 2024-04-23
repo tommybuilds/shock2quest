@@ -148,7 +148,6 @@ fn f32_from_bool(v: bool) -> f32 {
         0.0
     }
 }
-extern crate ffmpeg_next as ffmpeg;
 pub fn main() {
     // glfw: initialize and configure
     // ------------------------------
