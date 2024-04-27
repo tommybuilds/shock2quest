@@ -921,7 +921,7 @@ dependencies = [
  "byteorder",
  "cgmath",
  "engine",
- "ffmpeg-next",
+ "ffmpeg-the-third",
 ]
 
 [[package]]
@@ -1016,21 +1016,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "ffmpeg-next"
-version = "6.0.0"
+name = "ffmpeg-sys-the-third"
+version = "1.1.1+ffmpeg-6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8af03c47ad26832ab3aabc4cdbf210af3d3b878783edd5a7ba044ba33aab7a60"
-dependencies = [
- "bitflags 1.3.2",
- "ffmpeg-sys-next",
- "libc",
-]
-
-[[package]]
-name = "ffmpeg-sys-next"
-version = "6.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf650f461ccf130f4eef4927affed703cc387b183bfc4a7dfee86a076c131127"
+checksum = "94a4b2e9c02074c0ee85661b23b3ac849bad6afc554b503c183975f5e2e0d3de"
 dependencies = [
  "bindgen",
  "cc",
@@ -1038,6 +1027,17 @@ dependencies = [
  "num_cpus",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "ffmpeg-the-third"
+version = "1.3.0+ffmpeg-6.1"
+dependencies = [
+ "bitflags 1.3.2",
+ "ffmpeg-sys-the-third",
+ "image",
+ "libc",
+ "serde",
 ]
 
 [[package]]
@@ -2591,6 +2591,7 @@ dependencies = [
  "collision",
  "dark",
  "engine",
+ "engine_ffmpeg",
  "fbxcel-dom",
  "num",
  "num-derive",
@@ -2691,7 +2692,6 @@ dependencies = [
  "dark",
  "engine",
  "engine_ffmpeg",
- "ffmpeg-next",
  "gl",
  "glfw",
  "image",
